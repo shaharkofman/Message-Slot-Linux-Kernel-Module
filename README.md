@@ -35,3 +35,77 @@ graph LR
     Slot1 --> Ch1[Channel 10]
     Ch1 --> Ch2[Channel 45]
     Slot2 --> Ch3[Channel 5]
+```
+
+This ensures that memory is only consumed for channels that are actively in use, rather than pre-allocating a massive static array.
+
+## Installation & Build
+
+### Prerequisites
+* Linux Kernel Headers (5.x+)
+* GCC Compiler
+* Make
+
+### Compilation
+Build the kernel module and the user-space CLI tools:
+
+```bash
+make
+gcc -O3 -Wall -std=c11 message_sender.c -o message_sender
+gcc -O3 -Wall -std=c11 message_reader.c -o message_reader
+```
+
+### Loading the Module
+Insert the compiled module into the kernel:
+
+```bash
+sudo insmod message_slot.ko
+```
+
+## Usage
+
+### 1. Create a Device Node
+Manually create the character device file (Major Number 235):
+
+```bash
+sudo mknod /dev/slot0 c 235 0
+sudo chmod 777 /dev/slot0
+```
+
+### 2. Sending Messages
+Use the `message_sender` utility to write to a specific channel.
+
+**Syntax:**
+```bash
+./message_sender <device_path> <channel_id> <censorship_flag> <message>
+```
+* `channel_id`: Integer (non-negative).
+* `censorship_flag`: `0` for raw storage, `1` for censorship (replaces every 4th char with `#`).
+
+**Example:**
+```bash
+./message_sender /dev/slot0 10 0 "Hello Kernel!"
+```
+
+### 3. Reading Messages
+Use the `message_reader` utility to read from a specific channel.
+
+**Syntax:**
+```bash
+./message_reader <device_path> <channel_id>
+```
+
+**Example:**
+```bash
+./message_reader /dev/slot0 10
+# Output: Hello Kernel!
+```
+
+## Technical Implementation Details
+
+* **Memory Safety:** The module strictly validates all user pointers and buffer lengths to prevent kernel panics or unauthorized memory access.
+* **Cleanup:** The `__exit` routine traverses the entire nested linked list structure to free every allocated `slot_t` and `channel_t` node, ensuring zero memory leaks upon module unloading.
+* **Context Management:** Uses `file->private_data` to maintain state (Current Channel ID & Censorship Mode) across different system calls for a single file descriptor.
+
+## License
+GPL
